@@ -7,6 +7,7 @@
 //===================== Config Firebase =========================//
 #define FIREBASE_HOST "firstplant-project.firebaseio.com"
 #define FIREBASE_AUTH "492QWTQJHReTcF4ZOFfgjjpNHZQSRv8SCKbzvwff"
+String ID = "/007";
 
 //==================== Config connect WiFi ======================//
 const char* ssid = "Connectify-";
@@ -23,14 +24,14 @@ byte sensorInterrupt = D1;
 byte sensorPin       = D1;
 volatile int pulseCount = 0;
 int Calc;
-
+int warning;
 //============================ Function ==========================//
 void readFlow() {
-  int Fvolume =  Firebase.getInt("/Fertilization/Volume/");
+  int Fvolume =  Firebase.getInt(ID + "/Fertilization/Volume/");
   sei();
   delay (1000);
   cli();
-  Calc = ((pulseCount/ 7.5)/60)*1000;
+  Calc = ((pulseCount / 7.5) / 60) * 1000;
 
   Serial.println(Calc);
   if (Calc < Fvolume)
@@ -39,19 +40,19 @@ void readFlow() {
     Calc = 0;
     pulseCount = 0;
     ton_f();
-    Firebase.setString("/Fertilization/Notification/", "Enable");
-    Firebase.setString("/Fertilization/Status/", "Disable");
+    Firebase.setString(ID + "/Fertilization/Notification/", "Enable");
+    Firebase.setString(ID + "/Fertilization/Status/", "Disable");
     delay(100);
-    Firebase.setString("/Fertilization/Notification/", "Disable");
+    Firebase.setString(ID + "/Fertilization/Notification/", "Disable");
   }
 }
 
 void readFloww() {
-  int Fvolume =  Firebase.getInt("/AutoFertilization/Volume/");
+  int Fvolume =  Firebase.getInt(ID + "/AutoFertilization/Volume/");
   sei();
   delay (1000);
   cli();
-  Calc = ((pulseCount/ 7.5)/60)*1000;
+  Calc = ((pulseCount / 7.5) / 60) * 1000;
 
   Serial.println(Calc);
   if (Calc < Fvolume)
@@ -60,17 +61,15 @@ void readFloww() {
     Calc = 0;
     pulseCount = 0;
     ton_f();
-    Firebase.setString("/AutoFertilization/Notification/", "Enable");
-    Firebase.setString("/AutoFertilization/Status/", "Disable");
+    Firebase.setString(ID + "/AutoFertilization/Notification/", "Enable");
+    Firebase.setString(ID + "/AutoFertilization/Status/", "Disable");
     delay(100);
-    Firebase.setString("/AutoFertilization/Notification/", "Disable");
+    Firebase.setString(ID + "/AutoFertilization/Notification/", "Disable");
   }
 }
 
-void pulseCounter()
-{
-  pulseCount++;
-}
+void pulseCounter(){
+  pulseCount++;}
 
 void weather() {
   float humidity = dht.readHumidity();
@@ -79,23 +78,26 @@ void weather() {
   int moisture = digitalRead(soilPin);
   int rain = digitalRead(rainPin);
   int light = digitalRead(lightPin);
-  Firebase.setFloat("/Weather/Heatindex/", heat_index);
-  Firebase.setFloat("/Weather/Humidity/", humidity);
-  Firebase.setFloat("/Weather/Temperature/", temperature);
+
+  Firebase.setFloat(ID + "/Weather/Heatindex/", heat_index);
+  Firebase.setFloat(ID + "/Weather/Humidity/", humidity);
+  Firebase.setFloat(ID + "/Weather/Temperature/", temperature);
   if (light == 1 && rain == 1 && moisture == 1) { // dry cool
-    Firebase.setInt("/Weather/Sunlight/", 0);
-    Firebase.setInt("/Weather/Raindrop/", 0);
-    Firebase.setInt("/AutoIrrigation/Warning/", 0);
+    Firebase.setInt(ID + "/Weather/Sunlight/", 0);
+    Firebase.setInt(ID + "/Weather/Raindrop/", 0);
+    Firebase.setInt(ID + "/AutoIrrigation/Warning/", 0);
+    warning = 0;
   }
   else if (light == 0 || rain == 0 || moisture == 0) { // wet hot
-    Firebase.setInt("/AutoIrrigation/Warning/", 1);
+    Firebase.setInt(ID + "/AutoIrrigation/Warning/", 1);
+    warning = 1;
     if (light == 0 && rain == 0) {
-      Firebase.setInt("/Weather/Sunlight/", 1);
-      Firebase.setInt("/Weather/Raindrop/", 1);
+      Firebase.setInt(ID + "/Weather/Sunlight/", 1);
+      Firebase.setInt(ID + "/Weather/Raindrop/", 1);
     } else if (light == 0 && rain == 1)
-      Firebase.setInt("/Weather/Sunlight/", 1);
+      Firebase.setInt(ID + "/Weather/Sunlight/", 1);
     else if (rain == 0 && light == 1)
-      Firebase.setInt("/Weather/Raindrop/", 1);
+      Firebase.setInt(ID + "/Weather/Raindrop/", 1);
   }
 }
 
@@ -108,14 +110,26 @@ class weatherTask : public Task {
     }
 } weather_task;
 
+class offilineTask : public Task {
+  protected:
+    void loop()  {
+      if (WiFi.status() != WL_CONNECTED) {
+        if (warning == 0)
+          ton_i();
+        else
+          tof();
+      }
+    }
+} offline_task;
+
 class startTask : public Task {
   protected:
     void loop()  {
-      String AFstat = Firebase.getString("/AutoFertilization/Status/");
-      String AIstat = Firebase.getString("/AutoIrrigation/Status/");
-      int AIwarning = Firebase.getInt("/AutoIrrigation/Warning/");
-      String Fstat = Firebase.getString("/Fertilization/Status/");
-      String Istat = Firebase.getString("/Irrigation/Status/");
+      String AFstat = Firebase.getString(ID + "/AutoFertilization/Status/");
+      String AIstat = Firebase.getString(ID + "/AutoIrrigation/Status/");
+      int AIwarning = Firebase.getInt(ID + "/AutoIrrigation/Warning/");
+      String Fstat = Firebase.getString(ID + "/Fertilization/Status/");
+      String Istat = Firebase.getString(ID + "/Irrigation/Status/");
 
       if (AFstat == "Enable")
         readFloww();
@@ -128,20 +142,19 @@ class startTask : public Task {
       else if (Fstat == "Enable")
         readFlow();
       else if (Istat == "Enable") {
-        int Itime =  Firebase.getInt("/Irrigation/Time/") * 1000;
+        int Itime =  Firebase.getInt(ID + "/Irrigation/Time/") * 1000;
         ton_i();
         delay(Itime);
         tof();
-        Firebase.setString("/Irrigation/Notification/", "Enable");
-        Firebase.setString("/Irrigation/Status/", "Disable");
+        Firebase.setString(ID + "/Irrigation/Notification/", "Enable");
+        Firebase.setString(ID + "/Irrigation/Status/", "Disable");
         delay(100);
-        Firebase.setString("/Irrigation/Notification/", "Disable");
+        Firebase.setString(ID + "/Irrigation/Notification/", "Disable");
       }
-      else 
+      else
         tof();
     }
 } start_task;
-
 
 //============================== Main =============================//
 void setup() {
@@ -162,6 +175,7 @@ void setup() {
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
   attachInterrupt(sensorInterrupt, pulseCounter, RISING);
   Scheduler.start(&weather_task);
+  Scheduler.start(&offline_task);
   Scheduler.start(&start_task);
   Scheduler.begin();
 }
